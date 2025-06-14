@@ -9,114 +9,116 @@ import java.util.List;
 
 @Log
 public class ClientDaoImpl implements ClientDao {
-    private Statement statement;
+
+    private static final String TABLE_NAME = "clients";
     private final Connection connection;
-    private final String tableName = "clients";
-    public static ClientDaoImpl instance = new ClientDaoImpl();
+    private final Statement statement;
+
+    public static final ClientDaoImpl instance = new ClientDaoImpl();
+
     private ClientDaoImpl() {
         try {
-            statement = DatabaseConnection.getInstance().getConnection().createStatement();
-            connection = DatabaseConnection.getInstance().getConnection();
+            this.connection = DatabaseConnection.getInstance().getConnection();
+            this.statement = this.connection.createStatement();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            log.severe("Failed to initialize ClientDaoImpl: " + e.getMessage());
+            throw new RuntimeException("Database connection failed", e);
         }
     }
+
     @Override
     public Client save(Client client) {
-        String query = "INSERT INTO " + tableName +
-                " (id, first_name, last_name, address, birth_date, cin, email, phone) " +
-                "VALUES (null, ?, ?, ?, ?, ?, ?, ?)";
+        String query = "INSERT INTO " + TABLE_NAME +
+                " (first_name, last_name, address, birth_date, cin, email, phone, client_type, characteristic, characteristic_value) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-        try {
-            preparedInsertOrUpdateQuery(client, query);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+        executePreparedStatement(client, query);
+        log.info("Client saved: " + client);
         return client;
     }
 
     @Override
-    public void deleteById(Integer integer) {
+    public Client update(Client client, Integer id) {
+        if (findById(id) == null) {
+            throw new RuntimeException("Client with ID " + id + " not found");
+        }
 
+        String query = "UPDATE " + TABLE_NAME + " SET " +
+                "first_name = ?, last_name = ?, address = ?, birth_date = ?, cin = ?, " +
+                "email = ?, phone = ?, client_type = ?, characteristic = ?, characteristic_value = ? " +
+                "WHERE id = " + id;
+
+        executePreparedStatement(client, query);
+        log.info("Client updated: " + client);
+        return client;
+    }
+
+    @Override
+    public void deleteById(Integer id) {
+        String query = "DELETE FROM " + TABLE_NAME + " WHERE id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setInt(1, id);
+            int rowsAffected = pstmt.executeUpdate();
+            log.info("Deleted " + rowsAffected + " client(s) with ID " + id);
+        } catch (SQLException e) {
+            log.severe("Error deleting client by ID: " + e.getMessage());
+            throw new RuntimeException("Failed to delete client", e);
+        }
+    }
+
+    @Override
+    public void delete(Client client) {
+        deleteById(client.getId());
+    }
+
+    @Override
+    public void deleteAll() {
+        String query = "DELETE FROM " + TABLE_NAME;
+        try {
+            int rows = statement.executeUpdate(query);
+            log.info("Deleted all clients (" + rows + " rows).");
+        } catch (SQLException e) {
+            log.severe("Error deleting all clients: " + e.getMessage());
+            throw new RuntimeException("Failed to delete all clients", e);
+        }
     }
 
     @Override
     public Client findById(Integer id) {
-        try {
-            ResultSet result = statement.executeQuery(String.format("SELECT * FROM %s WHERE ID = %s", tableName, id));
-            result.next();
-            Client client =   Client.builder()
-                    .id(result.getInt("id"))
-                    .firstName(result.getString("first_name"))
-                    .lastName(result.getString("last_name"))
-                    .address(result.getString("address"))
-                    .birthDate(result.getDate("birth_date").toLocalDate())
-                    .characteristic(result.getString("characteristic"))
-                    .characteristicValue(result.getString("characteristic_value"))
-                    .email(result.getString("email"))
-                    .cin(result.getString("cin"))
-                    .build();
-            if (client == null) {
-                log.warning("Client not found");
-                throw new RuntimeException("Client not found");
+        String query = "SELECT * FROM " + TABLE_NAME + " WHERE id = ?";
+        try (PreparedStatement pstmt = connection.prepareStatement(query)) {
+            pstmt.setInt(1, id);
+            ResultSet result = pstmt.executeQuery();
+            if (result.next()) {
+                return mapResultSetToClient(result);
+            } else {
+                log.warning("Client not found with ID: " + id);
+                return null;
             }
-            return client;
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            log.severe("Error finding client by ID: " + e.getMessage());
+            throw new RuntimeException("Failed to find client", e);
         }
     }
 
     @Override
     public Iterable<Client> findAll() {
         List<Client> clients = new ArrayList<>();
-        try {
-            ResultSet result = statement.executeQuery(String.format("SELECT * FROM %s", tableName));
-            while (result.next()) {
-                Client client = Client.builder()
-                        .id(result.getInt("id"))
-                        .firstName(result.getString("first_name"))
-                        .lastName(result.getString("last_name"))
-                        .address(result.getString("address"))
-                        .birthDate(result.getDate("birth_date").toLocalDate())
-                        .characteristic(result.getString("characteristic"))
-                        .characteristicValue(result.getString("characteristic_value"))
-                        .email(result.getString("email"))
-                        .cin(result.getString("cin"))
-                        .build();
-                clients.add(client);
+        String query = "SELECT * FROM " + TABLE_NAME;
 
+        try (ResultSet result = statement.executeQuery(query)) {
+            while (result.next()) {
+                clients.add(mapResultSetToClient(result));
             }
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            log.severe("Error retrieving clients: " + e.getMessage());
+            throw new RuntimeException("Failed to fetch clients", e);
         }
+
         return clients;
     }
 
-    @Override
-    public Client update(Client client, Integer id) {
-        Client existClient = this.findById(id);
-        String query = "UPDATE " + tableName + " SET " +
-                "first_name = ?, " +
-                "last_name = ?, " +
-                "address = ?, " +
-                "birth_date = ?, " +
-                "cin = ?, " +
-                "email = ?, " +
-                "phone = ?, " +
-                "client_type = ?, " +
-                "characteristic = ?, " +
-                "characteristic_value = ? " +
-                "WHERE id = " + existClient.getId();
-
-        try {
-            preparedInsertOrUpdateQuery(client, query);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return client;
-    }
-
-    private void preparedInsertOrUpdateQuery(Client client,String query) throws SQLException {
+    private void executePreparedStatement(Client client, String query) {
         try (PreparedStatement pstmt = connection.prepareStatement(query)) {
             pstmt.setString(1, client.getFirstName());
             pstmt.setString(2, client.getLastName());
@@ -131,18 +133,24 @@ public class ClientDaoImpl implements ClientDao {
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException("Error while saving client", e);
+            log.severe("SQL execution failed: " + e.getMessage());
+            throw new RuntimeException("Failed to execute SQL statement", e);
         }
-
     }
 
-    @Override
-    public void delete(Client entity) {
-
-    }
-
-    @Override
-    public void deleteAll() {
-
+    private Client mapResultSetToClient(ResultSet result) throws SQLException {
+        return Client.builder()
+                .id(result.getInt("id"))
+                .firstName(result.getString("first_name"))
+                .lastName(result.getString("last_name"))
+                .address(result.getString("address"))
+                .birthDate(result.getDate("birth_date").toLocalDate())
+                .cin(result.getString("cin"))
+                .email(result.getString("email"))
+                .phone(result.getString("phone"))
+                .clientType(result.getString("client_type"))
+                .characteristic(result.getString("characteristic"))
+                .characteristicValue(result.getString("characteristic_value"))
+                .build();
     }
 }
