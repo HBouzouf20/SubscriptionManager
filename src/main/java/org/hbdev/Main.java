@@ -10,19 +10,20 @@ import java.time.LocalDate;
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
     public static void main(String[] args) {
-        ClientService clientService = new ClientServiceImpl();
+//        ClientService clientService = new ClientServiceImpl();
+//
+//        //clientService.findAll().forEach(System.out::println);
+//
+//        System.out.println("Find by ID");
+//        System.out.println(clientService.findById(4));
+//
+//        System.out.println("Updating ....");
+//        Client client = clientService.findById(4);
+//        client.setFirstName("Henry");
+//        clientService.update(client, 4);
+//        System.out.println(clientService.findById(4));
 
-        //clientService.findAll().forEach(System.out::println);
-
-        System.out.println("Find by ID");
-        System.out.println(clientService.findById(4));
-
-        System.out.println("Updating ....");
-        Client client = clientService.findById(4);
-        client.setFirstName("Henry");
-        clientService.update(client, 4);
-        System.out.println(clientService.findById(4));
-
+        MainFx.main(args);
       //  clientService.save(client);
 
     }

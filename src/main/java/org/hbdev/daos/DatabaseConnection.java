@@ -13,7 +13,6 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 @Log
-
 public class DatabaseConnection {
     @Getter
     private Connection connection;
